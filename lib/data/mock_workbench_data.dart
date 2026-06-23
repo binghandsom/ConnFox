@@ -30,6 +30,18 @@ List<WindowWorkspace> buildMockWorkspaces() {
     environment: 'STG',
   );
 
+  const warehouseConfig = DatabaseConnectionConfig(
+    id: 'postgres-warehouse',
+    name: 'Warehouse Analytics',
+    engine: DatabaseEngine.postgresql,
+    host: 'warehouse-pg.internal',
+    port: 5432,
+    database: 'warehouse',
+    username: 'analyst',
+    password: '',
+    environment: 'DEV',
+  );
+
   const prodConnection = ConnectionProfile(
     config: prodConfig,
     environment: 'PROD',
@@ -44,6 +56,14 @@ List<WindowWorkspace> buildMockWorkspaces() {
     latencyLabel: '11 ms',
     statusLabel: 'Fast',
     accentColor: Color(0xFFB45309),
+  );
+
+  const warehouseConnection = ConnectionProfile(
+    config: warehouseConfig,
+    environment: 'DEV',
+    latencyLabel: '14 ms',
+    statusLabel: 'Ready',
+    accentColor: Color(0xFF1D4ED8),
   );
 
   return <WindowWorkspace>[
@@ -238,6 +258,143 @@ LIMIT 30;
         'ER Diagram',
       ],
     ),
+    WindowWorkspace(
+      id: 'window-3',
+      title: 'Warehouse Analytics',
+      subtitle: 'PostgreSQL 示例窗口',
+      connection: warehouseConnection,
+      activeTabId: 'tab-pg-events',
+      tabs: const <QueryTabModel>[
+        QueryTabModel(
+          id: 'tab-pg-events',
+          title: 'Recent Events',
+          summary: '检查 PostgreSQL 事件流',
+          sql: '''
+SELECT
+  event_id,
+  event_type,
+  payload,
+  created_at
+FROM public.events
+WHERE created_at >= now() - interval '1 day'
+ORDER BY created_at DESC
+LIMIT 50;
+''',
+          resultColumns: <String>[
+            'event_id',
+            'event_type',
+            'payload',
+            'created_at',
+          ],
+          resultRows: <List<String>>[
+            <String>[
+              'evt_70018',
+              'checkout.completed',
+              '{"amount": 192.30}',
+              '2026-03-18 18:23:10+08',
+            ],
+            <String>[
+              'evt_70011',
+              'user.created',
+              '{"plan": "pro"}',
+              '2026-03-18 18:20:41+08',
+            ],
+            <String>[
+              'evt_69998',
+              'invoice.failed',
+              '{"retry": 2}',
+              '2026-03-18 18:17:59+08',
+            ],
+          ],
+          resultCountLabel: '3 preview rows',
+          executionLabel: '46 ms',
+          updatedAtLabel: '18:25',
+          pinned: true,
+        ),
+        QueryTabModel(
+          id: 'tab-pg-activity',
+          title: 'Activity',
+          summary: '查看 PostgreSQL 会话状态',
+          sql: '''
+SELECT
+  pid,
+  usename,
+  datname,
+  state,
+  wait_event_type
+FROM pg_stat_activity
+WHERE datname = current_database()
+ORDER BY query_start DESC
+LIMIT 20;
+''',
+          resultColumns: <String>[
+            'pid',
+            'usename',
+            'datname',
+            'state',
+            'wait_event_type',
+          ],
+          resultRows: <List<String>>[
+            <String>['4418', 'readonly', 'warehouse', 'active', 'Client'],
+            <String>['4421', 'analyst', 'warehouse', 'idle', 'Activity'],
+            <String>['4428', 'etl_bot', 'warehouse', 'active', 'IO'],
+          ],
+          resultCountLabel: '3 preview rows',
+          executionLabel: '38 ms',
+          updatedAtLabel: '18:24',
+        ),
+      ],
+      schema: const <SchemaNode>[
+        SchemaNode(
+          label: 'warehouse',
+          kind: 'database',
+          children: <SchemaNode>[
+            SchemaNode(
+              label: 'public',
+              kind: 'schema',
+              children: <SchemaNode>[
+                SchemaNode(label: 'accounts', kind: 'table'),
+                SchemaNode(label: 'events', kind: 'table'),
+                SchemaNode(label: 'recent_events_view', kind: 'view'),
+              ],
+            ),
+            SchemaNode(
+              label: 'analytics',
+              kind: 'schema',
+              children: <SchemaNode>[
+                SchemaNode(label: 'fct_orders', kind: 'table'),
+                SchemaNode(label: 'daily_revenue_mv', kind: 'materialized view'),
+              ],
+            ),
+          ],
+        ),
+        SchemaNode(
+          label: 'pg_catalog',
+          kind: 'system',
+          children: <SchemaNode>[
+            SchemaNode(label: 'pg_tables', kind: 'view'),
+            SchemaNode(label: 'pg_stat_activity', kind: 'view'),
+          ],
+        ),
+      ],
+      recentQueries: const <String>[
+        'SELECT now(), current_database();',
+        'SELECT * FROM pg_catalog.pg_tables LIMIT 50;',
+        'SELECT pid, usename, state FROM pg_stat_activity;',
+      ],
+      snippets: const <String>[
+        'Recent Events',
+        'Activity Monitor',
+        'Table Catalog',
+      ],
+      capabilities: const <String>[
+        'PostgreSQL Driver',
+        'Schema Preview',
+        'pg_catalog Queries',
+        'Read-Only Guard',
+        'Multi-Tab Layout',
+      ],
+    ),
   ];
 }
 
@@ -246,11 +403,7 @@ QueryTabModel buildScratchTab(ConnectionProfile connection, int ordinal) {
     id: 'scratch-$ordinal',
     title: 'Scratch $ordinal',
     summary: '新的查询草稿',
-    sql: '''
-SELECT *
-FROM ${connection.database}.your_table
-LIMIT 100;
-''',
+    sql: _scratchSqlFor(connection),
     resultColumns: const <String>['preview'],
     resultRows: const <List<String>>[
       <String>['Run query to inspect live data'],
@@ -268,4 +421,33 @@ LIMIT 100;
     lastRunScopeLabel: 'Draft',
     dirty: true,
   );
+}
+
+String _scratchSqlFor(ConnectionProfile connection) {
+  switch (connection.config.engine) {
+    case DatabaseEngine.postgresql:
+      return '''
+SELECT *
+FROM public.your_table
+LIMIT 100;
+''';
+    case DatabaseEngine.mysql:
+    case DatabaseEngine.mariadb:
+      return '''
+SELECT *
+FROM ${connection.database}.your_table
+LIMIT 100;
+''';
+    case DatabaseEngine.sqlite:
+      return '''
+SELECT *
+FROM your_table
+LIMIT 100;
+''';
+    case DatabaseEngine.sqlServer:
+      return '''
+SELECT TOP 100 *
+FROM dbo.your_table;
+''';
+  }
 }

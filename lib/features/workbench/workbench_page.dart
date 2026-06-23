@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../app/connfox_theme.dart';
 import '../../data/drivers/mock_mysql_driver.dart';
+import '../../data/drivers/mock_postgresql_driver.dart';
 import '../../data/persistence/local_workbench_store.dart';
 import '../../data/mock_workbench_data.dart';
 import '../../data/drivers/placeholder_database_driver.dart';
@@ -33,8 +34,8 @@ class _WorkbenchPageState extends State<WorkbenchPage> {
     driverRegistry: DriverRegistry(
       const <DatabaseDriver>[
         MockMySqlDriver(),
+        MockPostgreSqlDriver(),
         PlaceholderDatabaseDriver(DatabaseEngine.mariadb),
-        PlaceholderDatabaseDriver(DatabaseEngine.postgresql),
         PlaceholderDatabaseDriver(DatabaseEngine.sqlite),
         PlaceholderDatabaseDriver(DatabaseEngine.sqlServer),
       ],
@@ -287,21 +288,18 @@ class _WorkbenchPageState extends State<WorkbenchPage> {
       tabs: <QueryTabModel>[scratch],
       activeTabId: scratch.id,
       schema: schema,
-      recentQueries: const <String>[
-        'SELECT NOW();',
-        'SHOW TABLES;',
-        'SELECT DATABASE();',
-      ],
+      recentQueries: _defaultRecentQueriesFor(profile.config.engine),
       snippets: const <String>[
         'Recent Rows',
         'Count Records',
         'Schema Health Check',
       ],
-      capabilities: const <String>[
+      capabilities: <String>[
         'Connection Test',
         'Multi-Tab Layout',
         'Schema Preview',
         'Read-Only Guard',
+        '${profile.engine} Driver',
       ],
     );
 
@@ -314,7 +312,7 @@ class _WorkbenchPageState extends State<WorkbenchPage> {
     });
     _schedulePersist();
 
-    _showHint('连接已添加到工作台，下一步只需要把 mock driver 换成真实 MySQL driver。');
+    _showHint('连接已添加到工作台，当前使用 ${profile.engine} mock driver 跑通主链路。');
     _focusEditorFor(workspace.id, scratch.id);
   }
 
@@ -979,6 +977,36 @@ class _WorkbenchPageState extends State<WorkbenchPage> {
     );
   }
 
+  List<String> _defaultRecentQueriesFor(DatabaseEngine engine) {
+    switch (engine) {
+      case DatabaseEngine.postgresql:
+        return const <String>[
+          'SELECT now(), current_database();',
+          'SELECT * FROM pg_catalog.pg_tables LIMIT 50;',
+          'SELECT pid, usename, state FROM pg_stat_activity;',
+        ];
+      case DatabaseEngine.mysql:
+      case DatabaseEngine.mariadb:
+        return const <String>[
+          'SELECT NOW();',
+          'SHOW TABLES;',
+          'SELECT DATABASE();',
+        ];
+      case DatabaseEngine.sqlite:
+        return const <String>[
+          'SELECT datetime("now");',
+          'SELECT name FROM sqlite_master WHERE type = "table";',
+          'PRAGMA table_info(sample_table);',
+        ];
+      case DatabaseEngine.sqlServer:
+        return const <String>[
+          'SELECT SYSDATETIME();',
+          'SELECT TOP 50 * FROM sys.tables;',
+          'SELECT DB_NAME();',
+        ];
+    }
+  }
+
   String _formatTime(DateTime dateTime) {
     final hour = dateTime.hour.toString().padLeft(2, '0');
     final minute = dateTime.minute.toString().padLeft(2, '0');
@@ -1162,7 +1190,7 @@ class _WorkbenchPageState extends State<WorkbenchPage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Mac-first Flutter SQL workbench for MySQL and beyond',
+                  'Mac-first Flutter SQL workbench for MySQL and PostgreSQL',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: ConnFoxPalette.mutedText,
                       ),

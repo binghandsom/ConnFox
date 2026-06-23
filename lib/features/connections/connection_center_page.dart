@@ -174,20 +174,20 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            '先把连接配置和测试链路做顺，后面接真实 MySQL 驱动、Keychain 和 SSH 就会轻松很多。',
+            '先把 MySQL / PostgreSQL 的连接配置和测试链路做顺，后面接真实驱动、Keychain 和 SSH 就会轻松很多。',
             style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                   color: ConnFoxPalette.mutedText,
                 ),
           ),
           const SizedBox(height: 18),
           _GuideBadge(
-            label: 'Phase 1',
-            value: 'MySQL / MariaDB',
+            label: 'Ready',
+            value: 'MySQL / PostgreSQL',
           ),
           const SizedBox(height: 10),
           _GuideBadge(
             label: 'Later',
-            value: 'PostgreSQL / SQLite / SQL Server',
+            value: 'MariaDB / SQLite / SQL Server',
           ),
           const SizedBox(height: 22),
           _ChecklistCard(
@@ -206,7 +206,7 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
             items: const <String>[
               '保存到本地配置仓库',
               '密码写入 macOS Keychain',
-              '真实 MySQL 握手和超时处理',
+              '真实 MySQL / PostgreSQL 握手和超时处理',
               'Schema 首屏懒加载',
             ],
           ),
@@ -241,7 +241,7 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '这版先把 MySQL 主链路打通，表单结构已经为多数据库预留。',
+                        '这版先把 MySQL 和 PostgreSQL 主链路打通，表单结构继续为更多数据库预留。',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: ConnFoxPalette.mutedText,
                             ),
@@ -334,6 +334,7 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
                     }
                     setState(() {
                       _engine = engine;
+                      _applyEngineDefaults(engine);
                       if (!_engine.isFileBased) {
                         _portController.text = '${engine.defaultPort}';
                       }
@@ -531,7 +532,7 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
 
     return _SectionCard(
       title: 'Test Result',
-      subtitle: '先用 mock driver 跑通链路，后面替换成真实网络连接',
+      subtitle: '先用对应的 mock driver 跑通链路，后面替换成真实网络连接',
       child: result == null
           ? Container(
               width: double.infinity,
@@ -607,6 +608,49 @@ class _ConnectionCenterPageState extends State<ConnectionCenterPage> {
           case DatabaseEngine.sqlServer:
             return const Color(0xFFBE123C);
         }
+    }
+  }
+
+  void _applyEngineDefaults(DatabaseEngine engine) {
+    switch (engine) {
+      case DatabaseEngine.postgresql:
+        if (_nameController.text == 'My Local MySQL') {
+          _nameController.text = 'My Local PostgreSQL';
+        }
+        if (_usernameController.text == 'root') {
+          _usernameController.text = 'postgres';
+        }
+        if (_databaseController.text == 'app_db') {
+          _databaseController.text = 'postgres';
+        }
+        break;
+      case DatabaseEngine.mysql:
+      case DatabaseEngine.mariadb:
+        if (_nameController.text == 'My Local PostgreSQL') {
+          _nameController.text = 'My Local MySQL';
+        }
+        if (_usernameController.text == 'postgres') {
+          _usernameController.text = 'root';
+        }
+        if (_databaseController.text == 'postgres') {
+          _databaseController.text = 'app_db';
+        }
+        break;
+      case DatabaseEngine.sqlite:
+        if (_nameController.text == 'My Local MySQL' ||
+            _nameController.text == 'My Local PostgreSQL') {
+          _nameController.text = 'Local SQLite File';
+        }
+        _databaseController.text = _databaseController.text.trim().isEmpty
+            ? '/path/to/database.db'
+            : _databaseController.text;
+        break;
+      case DatabaseEngine.sqlServer:
+        if (_nameController.text == 'My Local MySQL' ||
+            _nameController.text == 'My Local PostgreSQL') {
+          _nameController.text = 'My Local SQL Server';
+        }
+        break;
     }
   }
 }
